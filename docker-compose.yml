@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  # Terminal Access Service
+  terminal-access:
+    build: .
+    container_name: terminal-access-service
+    volumes:
+      # Mount Docker socket to allow container management
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Mount source code for development (optional, remove in production)
+      - ./src:/app/src
+    environment:
+      - PORT=3000
+      - JWT_SECRET=b250YWluZXJOYW1lIjoidGVzdC11YnVudHUiLCJzZXNzaW
+      - TOKEN_EXPIRY=5m
+      - HOST=localhost
+      - PROTOCOL=ws
+      - NODE_ENV=development
+      - REQUIRE_AUTH=true
+      - UI_MODE=true
+      - API_KEYS=OiI0MmQxZmY2Mi0yY2JjLTRjMDgtYmRkZS1lZjg0YTVmZjFmMDgiLCJ0eXBlIjoidGVybWluYWwtYWNj
+    restart: unless-stopped
+    networks:
+      - terminal-network
+
+  # Nginx Reverse Proxy with SSL/WSS
+  nginx:
+    image: nginx:alpine
+    container_name: nginx-proxy
+    ports:
+      - "9080:80"
+      - "9443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - terminal-access
+    restart: unless-stopped
+    networks:
+      - terminal-network
+      
+networks:
+  terminal-network:
+    driver: bridge

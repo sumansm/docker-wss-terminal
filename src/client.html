@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Docker Terminal Access</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #1e1e1e;
+            color: #fff;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            background: #2d2d2d;
+            padding: 15px 20px;
+            border-bottom: 2px solid #007acc;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        }
+
+        .header h1 {
+            font-size: 20px;
+            font-weight: 600;
+            color: #007acc;
+        }
+
+        .connection-form {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex: 1;
+            justify-content: center;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .form-group label {
+            font-size: 12px;
+            color: #ccc;
+        }
+
+        .form-group input {
+            padding: 8px 12px;
+            border: 1px solid #444;
+            background: #3c3c3c;
+            color: #fff;
+            border-radius: 4px;
+            font-size: 14px;
+            min-width: 200px;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #007acc;
+        }
+
+        .btn {
+            padding: 8px 20px;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.2s;
+            margin-top: 17px;
+        }
+
+        .btn-primary {
+            background: #007acc;
+            color: #fff;
+        }
+
+        .btn-primary:hover {
+            background: #005a9e;
+        }
+
+        .btn-primary:disabled {
+            background: #555;
+            cursor: not-allowed;
+        }
+
+        .btn-danger {
+            background: #d9534f;
+            color: #fff;
+        }
+
+        .btn-danger:hover {
+            background: #c9302c;
+        }
+
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+        }
+
+        .status-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #6c757d;
+        }
+
+        .status-indicator.connected {
+            background: #28a745;
+            box-shadow: 0 0 10px rgba(40, 167, 69, 0.5);
+        }
+
+        .status-indicator.connecting {
+            background: #ffc107;
+            animation: pulse 1.5s infinite;
+        }
+
+        .status-indicator.error {
+            background: #dc3545;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .terminal-container {
+            flex: 1;
+            padding: 20px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #terminal {
+            flex: 1;
+            background: #000;
+            border-radius: 4px;
+            padding: 10px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+        }
+
+        .message {
+            padding: 12px 20px;
+            margin: 10px 20px;
+            border-radius: 4px;
+            font-size: 14px;
+            display: none;
+        }
+
+        .message.show {
+            display: block;
+        }
+
+        .message.error {
+            background: #d9534f;
+            color: #fff;
+        }
+
+        .message.info {
+            background: #5bc0de;
+            color: #fff;
+        }
+
+        .message.success {
+            background: #5cb85c;
+            color: #fff;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Docker Terminal Access</h1>
+        <div class="connection-form">
+            <div class="form-group">
+                <label for="containerName">Container Name</label>
+                <input type="text" id="containerName" placeholder="e.g., my-container" />
+            </div>
+            <div class="form-group">
+                <label for="apiKey">API Key</label>
+                <input type="password" id="apiKey" placeholder="Your API Key" />
+            </div>
+            <button id="connectBtn" class="btn btn-primary">Connect</button>
+            <button id="disconnectBtn" class="btn btn-danger" style="display: none;">Disconnect</button>
+        </div>
+        <div class="status">
+            <span class="status-indicator" id="statusIndicator"></span>
+            <span id="statusText">Disconnected</span>
+        </div>
+    </div>
+
+    <div id="message" class="message"></div>
+
+    <div class="terminal-container">
+        <div id="terminal"></div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
+    <script>
+        // Initialize xterm.js
+        const term = new Terminal({
+            cursorBlink: true,
+            fontSize: 14,
+            fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+            theme: {
+                background: '#000000',
+                foreground: '#ffffff',
+                cursor: '#ffffff',
+                cursorAccent: '#000000',
+                selection: 'rgba(255, 255, 255, 0.3)',
+                black: '#000000',
+                red: '#e06c75',
+                green: '#98c379',
+                yellow: '#d19a66',
+                blue: '#61afef',
+                magenta: '#c678dd',
+                cyan: '#56b6c2',
+                white: '#abb2bf',
+                brightBlack: '#5c6370',
+                brightRed: '#e06c75',
+                brightGreen: '#98c379',
+                brightYellow: '#d19a66',
+                brightBlue: '#61afef',
+                brightMagenta: '#c678dd',
+                brightCyan: '#56b6c2',
+                brightWhite: '#ffffff'
+            }
+        });
+
+        const fitAddon = new FitAddon.FitAddon();
+        term.loadAddon(fitAddon);
+        term.open(document.getElementById('terminal'));
+        fitAddon.fit();
+
+        // WebSocket connection
+        let ws = null;
+        let isConnected = false;
+
+        // UI Elements
+        const containerNameInput = document.getElementById('containerName');
+        const apiKeyInput = document.getElementById('apiKey');
+        const connectBtn = document.getElementById('connectBtn');
+        const disconnectBtn = document.getElementById('disconnectBtn');
+        const statusIndicator = document.getElementById('statusIndicator');
+        const statusText = document.getElementById('statusText');
+        const messageDiv = document.getElementById('message');
+
+        // Show message
+        function showMessage(text, type = 'info') {
+            messageDiv.textContent = text;
+            messageDiv.className = `message ${type} show`;
+            setTimeout(() => {
+                messageDiv.classList.remove('show');
+            }, 5000);
+        }
+
+        // Update status
+        function updateStatus(status, text) {
+            statusIndicator.className = `status-indicator ${status}`;
+            statusText.textContent = text;
+        }
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            if (isConnected) {
+                fitAddon.fit();
+                sendResize();
+            }
+        });
+
+        // Send resize command to server
+        function sendResize() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                const cols = term.cols;
+                const rows = term.rows;
+                const resizeMsg = `${cols},${rows}`;
+                const encoded = btoa(resizeMsg);
+                ws.send(encoded);
+            }
+        }
+
+        // Connect to container
+        async function connect() {
+            const containerName = containerNameInput.value.trim();
+            const apiKey = apiKeyInput.value.trim();
+
+            if (!containerName) {
+                showMessage('Please enter a container name', 'error');
+                return;
+            }
+
+            if (!apiKey) {
+                showMessage('Please enter an API key', 'error');
+                return;
+            }
+
+            updateStatus('connecting', 'Connecting...');
+            connectBtn.disabled = true;
+
+            try {
+                // Get access token
+                const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
+                const response = await fetch(`${protocol}//${window.location.host}/getaccess?containerName=${encodeURIComponent(containerName)}`, {
+                    headers: {
+                        'X-API-Key': apiKey
+                    }
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error || 'Failed to get access');
+                }
+
+                const data = await response.json();
+
+                if (!data.success) {
+                    throw new Error(data.error || 'Failed to get access');
+                }
+
+                // Connect to WebSocket
+                ws = new WebSocket(data.data.url);
+
+                ws.onopen = () => {
+                    isConnected = true;
+                    updateStatus('connected', `Connected to ${containerName}`);
+                    showMessage(`Connected to container: ${containerName}`, 'success');
+                    connectBtn.style.display = 'none';
+                    disconnectBtn.style.display = 'inline-block';
+                    containerNameInput.disabled = true;
+                    apiKeyInput.disabled = true;
+
+                    // Fit terminal and send initial resize
+                    fitAddon.fit();
+                    setTimeout(sendResize, 100);
+                };
+
+                ws.onmessage = (event) => {
+                    try {
+                        // Check if it's JSON (error message)
+                        const decoded = atob(event.data);
+                        if (decoded.startsWith('{')) {
+                            const json = JSON.parse(decoded);
+                            if (json.error) {
+                                showMessage(json.error, 'error');
+                                return;
+                            }
+                        }
+                        // Write to terminal
+                        term.write(decoded);
+                    } catch (e) {
+                        // Direct base64 output
+                        term.write(atob(event.data));
+                    }
+                };
+
+                ws.onerror = (error) => {
+                    console.error('WebSocket error:', error);
+                    showMessage('WebSocket connection error', 'error');
+                };
+
+                ws.onclose = () => {
+                    disconnect();
+                };
+
+                // Handle terminal input
+                term.onData((data) => {
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        const encoded = btoa(data);
+                        ws.send(encoded);
+                    }
+                });
+
+            } catch (error) {
+                console.error('Connection error:', error);
+                showMessage(error.message, 'error');
+                updateStatus('error', 'Connection failed');
+                connectBtn.disabled = false;
+            }
+        }
+
+        // Disconnect
+        function disconnect() {
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+            isConnected = false;
+            updateStatus('', 'Disconnected');
+            connectBtn.style.display = 'inline-block';
+            connectBtn.disabled = false;
+            disconnectBtn.style.display = 'none';
+            containerNameInput.disabled = false;
+            apiKeyInput.disabled = false;
+            term.clear();
+        }
+
+        // Event listeners
+        connectBtn.addEventListener('click', connect);
+        disconnectBtn.addEventListener('click', disconnect);
+
+        // Enter key to connect
+        containerNameInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') connect();
+        });
+        apiKeyInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') connect();
+        });
+
+        // Initial welcome message
+        term.writeln('\x1b[1;36m╔══════════════════════════════════════════════════════════╗\x1b[0m');
+        term.writeln('\x1b[1;36m║     Docker Terminal Access - WebSocket Terminal         ║\x1b[0m');
+        term.writeln('\x1b[1;36m╚══════════════════════════════════════════════════════════╝\x1b[0m');
+        term.writeln('');
+        term.writeln('\x1b[1;33mEnter container name and API key above to connect.\x1b[0m');
+        term.writeln('');
+    </script>
+</body>
+</html>
