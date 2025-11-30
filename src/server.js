@@ -397,11 +397,11 @@ wss.on('connection', async (ws, req) => {
 
 // Start server
 server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(`API endpoint: http://${HOST}:${PORT}/getaccess`);
-  console.log(`WebSocket endpoint: ${PROTOCOL}://${HOST}:${PORT}/terminal`);
+  console.log(`Server running on port 9443`);
+  console.log(`API endpoint: https://${HOST}:9443/getaccess`);
+  console.log(`WebSocket endpoint: ${PROTOCOL}://${HOST}:9443/terminal`);
   if (UI_MODE) {
-    console.log(`UI Mode: ENABLED - Access web interface at http://${HOST}:${PORT}/`);
+    console.log(`UI Mode: ENABLED - Access web interface at https://${HOST}:9443/`);
   } else {
     console.log(`UI Mode: DISABLED`);
   }
